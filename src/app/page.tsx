@@ -77,6 +77,15 @@ export default function Home() {
     }
   };
 
+  const getErrorMessage = (error: unknown): string | null => {
+    if (!error) return null;
+    if (typeof error === 'string') return error;
+    if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as any).message === 'string') {
+      return (error as { message: string }).message;
+    }
+    return 'An unexpected error occurred.';
+  };
+
   if (authLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -90,6 +99,7 @@ export default function Home() {
   }
 
   const chaptersForCurrentBook = currentBook ? chaptersByBookId[currentBook.id] || [] : [];
+  const displayError = getErrorMessage(projectError);
 
   return (
     <main className="flex flex-col h-screen">
@@ -121,7 +131,7 @@ export default function Home() {
               </button>
             </form>
             {loadingBooks && <p>Loading books...</p>}
-            {projectError && <p className="text-red-500 text-xs">Error: {projectError}</p>}
+            {displayError && <p className="text-red-500 text-xs">Error: {displayError}</p>}
             <ul className="space-y-1">
               {books.map((book) => (
                 <li key={book.id} 
