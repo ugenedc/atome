@@ -22,7 +22,7 @@ export interface Chapter {
 }
 
 // A more specific error type for Supabase errors or general errors
-type StoreError = PostgrestError | Error | { message: string; [key: string]: any };
+type StoreError = PostgrestError | Error | { message: string; [key: string]: unknown };
 
 interface ProjectState {
   books: Book[];
