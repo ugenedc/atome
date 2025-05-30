@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabaseClient';
-import type { User } from '@supabase/supabase-js';
+import type { User, PostgrestError } from '@supabase/supabase-js';
 
 // Define interfaces for Book and Chapter
 export interface Book {
@@ -21,6 +21,9 @@ export interface Chapter {
   updated_at: string | null;
 }
 
+// A more specific error type for Supabase errors or general errors
+type StoreError = PostgrestError | Error | { message: string; [key: string]: any };
+
 interface ProjectState {
   books: Book[];
   chaptersByBookId: Record<string, Chapter[]>;
@@ -28,7 +31,7 @@ interface ProjectState {
   currentChapter: Chapter | null;
   loadingBooks: boolean;
   loadingChapters: boolean;
-  error: string | null;
+  error: StoreError | string | null; // Allow string for simple messages too
   fetchBooks: (user: User) => Promise<void>;
   createBook: (title: string, user: User) => Promise<Book | null>;
   deleteBook: (bookId: string) => Promise<void>;
@@ -62,9 +65,10 @@ const useProjectStore = create<ProjectState>((set, get) => ({
         .order('created_at', { ascending: false });
       if (error) throw error;
       set({ books: data || [], loadingBooks: false });
-    } catch (error: any) {
+    } catch (e: unknown) {
+      const error = e as StoreError;
       console.error('Error fetching books:', error);
-      set({ error: error.message, loadingBooks: false });
+      set({ error: error.message || 'Failed to fetch books', loadingBooks: false });
     }
   },
 
@@ -86,9 +90,10 @@ const useProjectStore = create<ProjectState>((set, get) => ({
         return newBook;
       }
       return null;
-    } catch (error: any) {
+    } catch (e: unknown) {
+      const error = e as StoreError;
       console.error('Error creating book:', error);
-      set({ error: error.message, loadingBooks: false });
+      set({ error: error.message || 'Failed to create book', loadingBooks: false });
       return null;
     }
   },
@@ -96,8 +101,8 @@ const useProjectStore = create<ProjectState>((set, get) => ({
   deleteBook: async (bookId) => {
     set({ loadingBooks: true, error: null });
     try {
-      const { error } = await supabase.from('books').delete().eq('id', bookId);
-      if (error) throw error;
+      const { error: deleteError } = await supabase.from('books').delete().eq('id', bookId);
+      if (deleteError) throw deleteError;
       set((state) => {
         const newChaptersByBookId = { ...state.chaptersByBookId };
         delete newChaptersByBookId[bookId];
@@ -109,9 +114,10 @@ const useProjectStore = create<ProjectState>((set, get) => ({
           loadingBooks: false,
         };
       });
-    } catch (error: any) {
+    } catch (e: unknown) {
+      const error = e as StoreError;
       console.error('Error deleting book:', error);
-      set({ error: error.message, loadingBooks: false });
+      set({ error: error.message || 'Failed to delete book', loadingBooks: false });
     }
   },
 
@@ -143,9 +149,10 @@ const useProjectStore = create<ProjectState>((set, get) => ({
         chaptersByBookId: { ...state.chaptersByBookId, [bookId]: data || [] },
         loadingChapters: false,
       }));
-    } catch (error: any) {
+    } catch (e: unknown) {
+      const error = e as StoreError;
       console.error(`Error fetching chapters for book ${bookId}:`, error);
-      set({ error: error.message, loadingChapters: false });
+      set({ error: error.message || `Failed to fetch chapters for book ${bookId}`, loadingChapters: false });
     }
   },
 
@@ -176,9 +183,10 @@ const useProjectStore = create<ProjectState>((set, get) => ({
         return newChapter;
       }
       return null;
-    } catch (error: any) {
+    } catch (e: unknown) {
+      const error = e as StoreError;
       console.error('Error creating chapter:', error);
-      set({ error: error.message, loadingChapters: false });
+      set({ error: error.message || 'Failed to create chapter', loadingChapters: false });
       return null;
     }
   },
@@ -205,9 +213,10 @@ const useProjectStore = create<ProjectState>((set, get) => ({
           loadingChapters: false,
         }));
       }
-    } catch (error: any) {
+    } catch (e: unknown) {
+      const error = e as StoreError;
       console.error('Error updating chapter content:', error);
-      set({ error: error.message, loadingChapters: false });
+      set({ error: error.message || 'Failed to update chapter', loadingChapters: false });
     }
   },
 
@@ -221,8 +230,8 @@ const useProjectStore = create<ProjectState>((set, get) => ({
         updated_at: new Date().toISOString(),
       }));
 
-      const { error } = await supabase.from('chapters').upsert(updates);
-      if (error) throw error;
+      const { error: upsertError } = await supabase.from('chapters').upsert(updates);
+      if (upsertError) throw upsertError;
 
       const bookId = chaptersToUpdate[0].book_id;
       set(state => {
@@ -240,9 +249,10 @@ const useProjectStore = create<ProjectState>((set, get) => ({
         }
       });
 
-    } catch (error: any) {
+    } catch (e: unknown) {
+      const error = e as StoreError;
       console.error('Error updating chapter order:', error);
-      set({ error: error.message, loadingChapters: false });
+      set({ error: error.message || 'Failed to update chapter order', loadingChapters: false });
     }
   },
 
@@ -258,11 +268,11 @@ const useProjectStore = create<ProjectState>((set, get) => ({
         }
       }
 
-      const { error } = await supabase.from('chapters').delete().eq('id', chapterId);
-      if (error) throw error;
+      const { error: deleteError } = await supabase.from('chapters').delete().eq('id', chapterId);
+      if (deleteError) throw deleteError;
 
       if (bookIdToDeleteFrom) {
-        const finalBookId = bookIdToDeleteFrom; // Keep for closure
+        const finalBookId = bookIdToDeleteFrom;
         set((state) => ({
           chaptersByBookId: {
             ...state.chaptersByBookId,
@@ -274,9 +284,10 @@ const useProjectStore = create<ProjectState>((set, get) => ({
       } else {
          set({ loadingChapters: false });
       }
-    } catch (error: any) {
+    } catch (e: unknown) {
+      const error = e as StoreError;
       console.error('Error deleting chapter:', error);
-      set({ error: error.message, loadingChapters: false });
+      set({ error: error.message || 'Failed to delete chapter', loadingChapters: false });
     }
   },
 

@@ -17,7 +17,7 @@ interface AuthState {
   initializeAuthListener: () => () => void; // Returns the unsubscribe function
 }
 
-const useAuthStore = create<AuthState>((set, get) => ({
+const useAuthStore = create<AuthState>((set) => ({
   session: null,
   user: null,
   loading: true,

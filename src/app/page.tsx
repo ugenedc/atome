@@ -2,7 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react';
 import useAuthStore from '@/stores/authStore';
-import useProjectStore, { Book, Chapter } from '@/stores/projectStore';
+import useProjectStore from '@/stores/projectStore';
 import AuthForm from '@/components/AuthForm';
 
 export default function Home() {
@@ -19,7 +19,6 @@ export default function Home() {
     createBook,
     deleteBook,
     setCurrentBook,
-    fetchChaptersForBook,
     createChapter,
     deleteChapter,
     setCurrentChapter,
@@ -49,7 +48,7 @@ export default function Home() {
     if (newBookTitle.trim() && user) {
       const newBook = await createBook(newBookTitle.trim(), user);
       if (newBook) {
-        setCurrentBook(newBook);
+        await setCurrentBook(newBook);
         setNewBookTitle('');
       }
     }
@@ -174,9 +173,8 @@ export default function Home() {
             <div>
               <h1 className="text-3xl font-bold mb-2">{currentChapter.title}</h1>
               <p className="text-sm text-gray-500 mb-4">Book: {currentBook?.title}</p>
-              {/* Placeholder for TipTap editor */}
               <div className="bg-white p-6 rounded shadow min-h-[calc(100%-6rem)]">
-                <p>Text editor for '{currentChapter.title}' will go here.</p>
+                <p>Text editor for &apos;{currentChapter.title}&apos; will go here.</p>
                 <p className="mt-4 text-xs text-gray-400">Content: {currentChapter.content || 'Empty chapter'}</p>
               </div>
             </div>
