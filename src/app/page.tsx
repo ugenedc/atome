@@ -1,103 +1,204 @@
-import Image from "next/image";
+'use client';
+
+import { useEffect, useState, FormEvent } from 'react';
+import useAuthStore from '@/stores/authStore';
+import useProjectStore, { Book, Chapter } from '@/stores/projectStore';
+import AuthForm from '@/components/AuthForm';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const { session, loading: authLoading, initializeAuthListener, signOut, user } = useAuthStore();
+  const {
+    books,
+    chaptersByBookId,
+    currentBook,
+    currentChapter,
+    loadingBooks,
+    loadingChapters,
+    error: projectError,
+    fetchBooks,
+    createBook,
+    deleteBook,
+    setCurrentBook,
+    fetchChaptersForBook,
+    createChapter,
+    deleteChapter,
+    setCurrentChapter,
+    clearProjectData
+  } = useProjectStore();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  const [newBookTitle, setNewBookTitle] = useState('');
+  const [newChapterTitle, setNewChapterTitle] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = initializeAuthListener();
+    return () => {
+      unsubscribe();
+    };
+  }, [initializeAuthListener]);
+
+  useEffect(() => {
+    if (session && user) {
+      fetchBooks(user);
+    } else {
+      clearProjectData();
+    }
+  }, [session, user, fetchBooks, clearProjectData]);
+
+  const handleCreateBook = async (e: FormEvent) => {
+    e.preventDefault();
+    if (newBookTitle.trim() && user) {
+      const newBook = await createBook(newBookTitle.trim(), user);
+      if (newBook) {
+        setCurrentBook(newBook);
+        setNewBookTitle('');
+      }
+    }
+  };
+
+  const handleCreateChapter = async (e: FormEvent) => {
+    e.preventDefault();
+    if (newChapterTitle.trim() && currentBook && user) {
+      const newChap = await createChapter(currentBook.id, newChapterTitle.trim(), user);
+      if (newChap) {
+        setCurrentChapter(newChap);
+        setNewChapterTitle('');
+      }
+    }
+  };
+  
+  const handleDeleteBook = async (bookId: string) => {
+    if (confirm('Are you sure you want to delete this book and all its chapters?')) {
+      await deleteBook(bookId);
+    }
+  };
+
+  const handleDeleteChapter = async (chapterId: string) => {
+    if (confirm('Are you sure you want to delete this chapter?')) {
+      await deleteChapter(chapterId);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading authentication...</p>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthForm />;
+  }
+
+  const chaptersForCurrentBook = currentBook ? chaptersByBookId[currentBook.id] || [] : [];
+
+  return (
+    <main className="flex flex-col h-screen">
+      <header className="flex items-center justify-between p-4 bg-gray-800 text-white">
+        <div>Welcome, {user?.email || 'User'}!</div>
+        <button
+          onClick={signOut}
+          className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+          Sign Out
+        </button>
+      </header>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar for Books/Chapters */}
+        <aside className="w-1/4 bg-gray-200 p-4 overflow-y-auto space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold mb-2">Books</h2>
+            <form onSubmit={handleCreateBook} className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newBookTitle}
+                onChange={(e) => setNewBookTitle(e.target.value)}
+                placeholder="New book title"
+                className="flex-grow p-2 border rounded text-sm"
+                disabled={loadingBooks}
+              />
+              <button type="submit" className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm" disabled={loadingBooks || !newBookTitle.trim()}>
+                {loadingBooks ? '...' : 'Add'}
+              </button>
+            </form>
+            {loadingBooks && <p>Loading books...</p>}
+            {projectError && <p className="text-red-500 text-xs">Error: {projectError}</p>}
+            <ul className="space-y-1">
+              {books.map((book) => (
+                <li key={book.id} 
+                    className={`p-2 rounded cursor-pointer hover:bg-gray-300 ${currentBook?.id === book.id ? 'bg-gray-400 font-semibold' : ''}`}>
+                  <div className="flex justify-between items-center">
+                    <span onClick={() => setCurrentBook(book)} className="flex-grow">{book.title}</span>
+                    <button onClick={() => handleDeleteBook(book.id)} className="text-red-500 hover:text-red-700 text-xs p-1">✕</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {currentBook && (
+            <div>
+              <h3 className="text-lg font-semibold mt-4 mb-2">Chapters for: {currentBook.title}</h3>
+              <form onSubmit={handleCreateChapter} className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={newChapterTitle}
+                  onChange={(e) => setNewChapterTitle(e.target.value)}
+                  placeholder="New chapter title"
+                  className="flex-grow p-2 border rounded text-sm"
+                  disabled={loadingChapters}
+                />
+                <button type="submit" className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm" disabled={loadingChapters || !newChapterTitle.trim()}>
+                  {loadingChapters ? '...' : 'Add'}
+                </button>
+              </form>
+              {loadingChapters && <p>Loading chapters...</p>}
+              <ul className="space-y-1">
+                {chaptersForCurrentBook.map((chapter) => (
+                  <li key={chapter.id} 
+                      onClick={() => setCurrentChapter(chapter)} 
+                      className={`p-2 rounded cursor-pointer hover:bg-gray-300 ${currentChapter?.id === chapter.id ? 'bg-gray-400 font-semibold' : ''}`}>
+                     <div className="flex justify-between items-center">
+                        <span className="flex-grow">{chapter.title} (Order: {chapter.chapter_order})</span>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chapter.id);}} className="text-red-500 hover:text-red-700 text-xs p-1">✕</button>
+                      </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </aside>
+
+        {/* Main Writing Area */}
+        <section className="flex-1 p-8 overflow-y-auto">
+          {currentChapter ? (
+            <div>
+              <h1 className="text-3xl font-bold mb-2">{currentChapter.title}</h1>
+              <p className="text-sm text-gray-500 mb-4">Book: {currentBook?.title}</p>
+              {/* Placeholder for TipTap editor */}
+              <div className="bg-white p-6 rounded shadow min-h-[calc(100%-6rem)]">
+                <p>Text editor for '{currentChapter.title}' will go here.</p>
+                <p className="mt-4 text-xs text-gray-400">Content: {currentChapter.content || 'Empty chapter'}</p>
+              </div>
+            </div>
+          ) : currentBook ? (
+             <div className="text-center text-gray-500 mt-10">
+                <h1 className="text-2xl font-bold mb-4">{currentBook.title}</h1>
+                <p>Select a chapter to start writing, or create a new one.</p>
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 mt-10">
+                <h1 className="text-2xl font-bold mb-4">Welcome to Atome</h1>
+                <p>Select a book to get started, or create a new one.</p>
+            </div>
+          )}
+        </section>
+
+        {/* Right Sidebar for Profiles/Notes */}
+        <aside className="w-1/4 bg-gray-200 p-4 overflow-y-auto">
+          <h2 className="text-xl font-semibold mb-4">Profiles & Notes</h2>
+          <p>Character profiles and notes will go here.</p>
+        </aside>
+      </div>
+    </main>
   );
 }
