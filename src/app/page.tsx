@@ -80,8 +80,10 @@ export default function Home() {
   const getErrorMessage = (error: unknown): string | null => {
     if (!error) return null;
     if (typeof error === 'string') return error;
-    if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as any).message === 'string') {
-      return (error as { message: string }).message;
+    // Check if error is an object and has a message property of type string
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+      const msg = (error as { message: unknown }).message;
+      if (typeof msg === 'string') return msg;
     }
     return 'An unexpected error occurred.';
   };
