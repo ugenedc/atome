@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState, FormEvent, useCallback } from 'react';
+import { useEffect, useState, FormEvent, useCallback, useMemo } from 'react';
 import useAuthStore from '@/stores/authStore';
-import useProjectStore, { Book, Chapter } from '@/stores/projectStore'; // Import types
+import useProjectStore from '@/stores/projectStore';
 import MDEditor from "@uiw/react-md-editor";
-import styles from '../../page.module.css'; // Adjust path to the existing CSS module
+import styles from '../../page.module.css';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-// Debounce function (can be moved to a utils file later)
-function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
+// Debounce function
+function debounce<F extends (...args: Parameters<F>) => ReturnType<F>>(func: F, waitFor: number) {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   const debounced = (...args: Parameters<F>) => {
     if (timeout !== null) {
@@ -18,7 +18,7 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
     }
     timeout = setTimeout(() => func(...args), waitFor);
   };
-  return debounced as (...args: Parameters<F>) => void;
+  return debounced as (...args: Parameters<F>) => void; // Return type is void as it's fire-and-forget
 }
 
 interface BookPageProps {
@@ -33,14 +33,12 @@ export default function BookPage({ params }: BookPageProps) {
   const { bookId } = params;
 
   const {
-    // books, // No longer need the whole list here
     chaptersByBookId,
     currentBook,
     currentChapter,
-    // loadingBooks, // loading state for individual book fetch will be handled here or in store
     loadingChapters,
     error: projectError,
-    fetchBookById, // Use the new function
+    fetchBookById,
     setCurrentBook,
     createChapter,
     updateChapterContent,
@@ -52,44 +50,35 @@ export default function BookPage({ params }: BookPageProps) {
   const [editorContent, setEditorContent] = useState<string | undefined>('');
   const [isZenMode, setIsZenMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingBook, setIsLoadingBook] = useState(true); // Local loading state for the book itself
+  const [isLoadingBook, setIsLoadingBook] = useState(true);
 
   useEffect(() => {
     if (user && bookId) {
       setIsLoadingBook(true);
-      // Check if the book is already the current one and matches bookId
       if (currentBook && currentBook.id === bookId) {
         setIsLoadingBook(false);
-        // Ensure chapters are loaded if currentBook was already set (e.g. from store cache)
         if(!chaptersByBookId[bookId] || chaptersByBookId[bookId].length === 0){
-            // This relies on setCurrentBook in the store to also fetch chapters.
-            // If setCurrentBook is called with the same book, it might not re-fetch chapters.
-            // Consider a dedicated fetchChaptersForBook if needed here.
             setCurrentBook(currentBook); 
         }
         return;
       }
-
-      // Attempt to find in store first (e.g. if books were fetched by dashboard)
       const bookFromStore = useProjectStore.getState().books.find(b => b.id === bookId);
       if (bookFromStore) {
         setCurrentBook(bookFromStore).then(() => setIsLoadingBook(false));
       } else {
-        // If not in store, fetch it directly
         fetchBookById(bookId, user).then(fetchedBook => {
           if (fetchedBook) {
-            setCurrentBook(fetchedBook); // This will also fetch chapters via the store logic
+            setCurrentBook(fetchedBook);
           } else {
-            // Book not found or error, redirect to dashboard
             router.replace('/dashboard');
           }
           setIsLoadingBook(false);
         });
       }
-    } else if (!user && !authLoading) { // If no user and auth is done loading, redirect
+    } else if (!user && !authLoading) {
         router.replace('/');
     }
-  }, [bookId, user, authLoading, fetchBookById, setCurrentBook, router, currentBook, chaptersByBookId]); // Added currentBook and chaptersByBookId
+  }, [bookId, user, authLoading, fetchBookById, setCurrentBook, router, currentBook, chaptersByBookId]);
 
   const toggleZenMode = useCallback(() => {
     setIsZenMode(prev => !prev);
@@ -109,7 +98,7 @@ export default function BookPage({ params }: BookPageProps) {
 
  useEffect(() => {
     if (currentChapter) {
-      if(editorContent !== currentChapter.content){
+      if (editorContent !== currentChapter.content) {
          setEditorContent(currentChapter.content || '');
       }
     } else {
@@ -118,7 +107,7 @@ export default function BookPage({ params }: BookPageProps) {
     if (isZenMode && !currentChapter) {
       setIsZenMode(false);
     }
-  }, [currentChapter, isZenMode]);
+  }, [currentChapter, editorContent, isZenMode]);
 
   const handleCreateChapter = async (e: FormEvent) => {
     e.preventDefault();
@@ -158,7 +147,10 @@ export default function BookPage({ params }: BookPageProps) {
     }
   }, [currentChapter, updateChapterContent]);
   
-  const debouncedSave = useCallback(debounce(handleSaveContent, 1500), [handleSaveContent]);
+  const debouncedSave = useMemo(() => 
+    debounce(handleSaveContent, 1500), 
+    [handleSaveContent]
+  );
 
   useEffect(() => {
     if (editorContent !== undefined && currentChapter && editorContent !== currentChapter.content) {
@@ -172,7 +164,6 @@ export default function BookPage({ params }: BookPageProps) {
     }
   }, [session, authLoading, router]);
 
-  // Updated loading condition
   if (authLoading || !session || isLoadingBook) { 
     return (
       <div className="flex items-center justify-center h-screen">
@@ -181,7 +172,6 @@ export default function BookPage({ params }: BookPageProps) {
     );
   }
 
-  // If, after loading, currentBook is still null (e.g., fetchBookById returned null)
   if (!currentBook) {
     return (
         <div className="flex flex-col items-center justify-center h-screen">
@@ -196,14 +186,9 @@ export default function BookPage({ params }: BookPageProps) {
   const chaptersForCurrentBook = chaptersByBookId[currentBook.id] || [];
   const displayError = getErrorMessage(projectError);
 
-  // The three-column layout will be reconstructed here
   return (
     <main className={`${styles.mainLayout} ${isZenMode ? styles.zenModeActive : ''} flex flex-col h-screen bg-white dark:bg-gray-900`}>
-      {/* Application Header (Optional for this view, or could be a simplified one) */}
-      {/* For now, let's omit a top-level app header on this page for focus */}
-      
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar: Chapters for currentBook */}
         {!isZenMode && (
           <aside className="w-64 bg-gray-50 dark:bg-gray-800 p-4 overflow-y-auto space-y-4 border-r border-gray-200 dark:border-gray-700">
             <div>
@@ -239,7 +224,6 @@ export default function BookPage({ params }: BookPageProps) {
           </aside>
         )}
 
-        {/* Main Writing Area */}
         <section className={`flex-1 flex flex-col overflow-hidden ${isZenMode ? 'p-0' : 'bg-white dark:bg-gray-900'} ${isZenMode ? styles.zenEditorSection : ''}`}>
           {currentChapter ? (
             <div className="flex flex-col flex-grow h-full">
@@ -302,7 +286,6 @@ export default function BookPage({ params }: BookPageProps) {
                 <p>Select a chapter to start writing, or create a new one.</p>
             </div>
           ) : (
-            // This case should ideally be handled by the !currentBook check earlier if bookId was invalid
             <div className={`text-center mt-10 p-8 ${isZenMode ? styles.zenPlaceholder : 'text-gray-500 dark:text-gray-400'}`}>
                 <h1 className={`text-2xl font-bold mb-4 ${isZenMode ? 'text-gray-700' : 'text-gray-700 dark:text-gray-200'}`}>Book not loaded</h1>
                 <p>Please select a book from the dashboard.</p>
@@ -310,13 +293,11 @@ export default function BookPage({ params }: BookPageProps) {
           )}
         </section>
 
-        {/* Right Sidebar for Profiles/Notes (scoped to currentBook) */}
         {!isZenMode && (
           <aside className="w-64 bg-gray-50 dark:bg-gray-800 p-4 overflow-y-auto border-l border-gray-200 dark:border-gray-700">
             <h2 className="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-200">Profiles & Notes</h2>
             {currentBook && <p className="text-xs text-gray-500 dark:text-gray-400">For: {currentBook.title}</p>}
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Character profiles and notes will go here.</p>
-            {/* TODO: Implement Profile creation and listing for currentBook */}
           </aside>
         )}
       </div>
