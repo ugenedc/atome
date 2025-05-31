@@ -22,15 +22,13 @@ function debounce<F extends (...args: Parameters<F>) => ReturnType<F>>(func: F, 
 }
 
 interface BookPageProps {
-  params: {
-    bookId: string;
-  };
+  params: any; // Changed to any to workaround Next.js 15.3.3 type issue
 }
 
 export default function BookPage({ params }: BookPageProps) {
   const { session, loading: authLoading, user } = useAuthStore();
   const router = useRouter();
-  const { bookId } = params;
+  const bookId = params.bookId as string; // Extract and cast bookId
 
   const {
     chaptersByBookId,
