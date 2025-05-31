@@ -5,13 +5,6 @@
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
@@ -22,5 +15,70 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* font-family will be handled by next/font (Inter) and Tailwind's defaults */
+}
+
+/* Styles for Markdown rendered content within the editor preview and potentially other areas */
+.wmde-markdown h1, .wmde-markdown h2, .wmde-markdown h3, .wmde-markdown h4, .wmde-markdown h5, .wmde-markdown h6 {
+  @apply font-semibold mb-4 mt-6 leading-tight;
+}
+
+.wmde-markdown h1 {
+  @apply text-4xl border-b pb-2;
+}
+
+.wmde-markdown h2 {
+  @apply text-3xl border-b pb-2;
+}
+
+.wmde-markdown h3 {
+  @apply text-2xl;
+}
+
+.wmde-markdown h4 {
+  @apply text-xl;
+}
+
+.wmde-markdown h5 {
+  @apply text-lg;
+}
+
+.wmde-markdown h6 {
+  @apply text-base;
+}
+
+.wmde-markdown p {
+  @apply mb-4 leading-relaxed text-base;
+}
+
+.wmde-markdown ul, .wmde-markdown ol {
+  @apply mb-4 pl-6;
+}
+
+.wmde-markdown li {
+  @apply mb-1;
+}
+
+.wmde-markdown blockquote {
+  @apply border-l-4 border-gray-300 pl-4 italic my-4 text-gray-600;
+}
+
+.wmde-markdown pre {
+  @apply bg-gray-100 dark:bg-gray-800 p-4 rounded-md overflow-x-auto my-4 text-sm;
+}
+
+.wmde-markdown code {
+  @apply bg-gray-200 dark:bg-gray-700 px-1 py-0.5 rounded text-sm;
+}
+
+.wmde-markdown pre code {
+  @apply bg-transparent p-0 rounded-none; /* Reset for code blocks */
+}
+
+.wmde-markdown a {
+  @apply text-blue-600 hover:underline;
+}
+
+.wmde-markdown hr {
+  @apply my-8 border-gray-300 dark:border-gray-700;
 }

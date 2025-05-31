@@ -1,0 +1,156 @@
+/* Styles for MDEditor to ensure it blends well with Tailwind */
+
+/* Ensure the editor container takes up full height */
+.editorContainer > .w-md-editor {
+  height: 100% !important; /* Override inline styles if necessary */
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Toolbar styling */
+.editorContainer .w-md-editor-toolbar {
+  background-color: theme('colors.gray.50') !important;
+  border-bottom: 1px solid theme('colors.gray.200') !important;
+  padding: 0.25rem 0.5rem !important; /* Reduced padding */
+}
+
+.editorContainer .w-md-editor-toolbar li > button {
+  color: theme('colors.gray.600') !important;
+}
+
+.editorContainer .w-md-editor-toolbar li > button:hover {
+  background-color: theme('colors.gray.200') !important;
+  color: theme('colors.gray.800') !important;
+}
+
+/* Dark mode toolbar */
+html.dark .editorContainer .w-md-editor-toolbar {
+  background-color: theme('colors.gray.800') !important;
+  border-bottom-color: theme('colors.gray.700') !important;
+}
+
+html.dark .editorContainer .w-md-editor-toolbar li > button {
+  color: theme('colors.gray.400') !important;
+}
+
+html.dark .editorContainer .w-md-editor-toolbar li > button:hover {
+  background-color: theme('colors.gray.700') !important;
+  color: theme('colors.gray.200') !important;
+}
+
+/* Preview and editor text areas */
+.editorContainer .w-md-editor-content {
+  font-size: theme('fontSize.base') !important;
+  line-height: theme('lineHeight.relaxed') !important;
+}
+
+.editorContainer .wmde-markdown {
+  font-family: theme('fontFamily.sans') !important; /* Ensure Inter font is used if not inherited*/
+  padding: 1rem 1.5rem !important; /* Add some padding inside the preview/editor panes */
+}
+
+/* Make editor text area background match overall page background */
+.editorContainer .w-md-editor-text-input,
+.editorContainer .w-md-editor-text-pre > code {
+  background-color: theme('colors.white') !important;
+  color: theme('colors.gray.900') !important;
+  font-family: theme('fontFamily.sans') !important;
+  font-size: theme('fontSize.base') !important;
+  line-height: theme('lineHeight.relaxed') !important;
+}
+
+html.dark .editorContainer .w-md-editor-text-input,
+html.dark .editorContainer .w-md-editor-text-pre > code {
+  background-color: theme('colors.gray.900') !important;
+  color: theme('colors.gray.100') !important;
+}
+
+/* Remove default border around the content area if MDEditor adds one */
+.editorContainer .w-md-editor-area {
+  border: none !important;
+}
+
+/* Zen Mode Styles */
+.mainLayout.zenModeActive {
+  /* Override any parent background that might interfere */
+  background-color: theme('colors.white') !important;
+}
+
+.zenEditorSection {
+  padding: 0 !important; /* Remove padding from the section itself */
+  background-color: theme('colors.white') !important; /* Force white background */
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50; /* Ensure it covers everything */
+}
+
+.zenEditorWrapper {
+  padding: 2rem !important; /* Padding around the MDEditor component */
+  margin: 0 auto; /* Center the wrapper */
+  max-width: 80ch; /* Optimal reading width */
+  width: 100%;
+  height: 100%;
+  overflow-y: auto; /* Allow scrolling within the wrapper if content exceeds height */
+  background-color: theme('colors.white') !important; /* Force white background */
+}
+
+.zenEditorWrapper .w-md-editor-text-input,
+.zenEditorWrapper .w-md-editor-text-pre > code,
+.zenEditorWrapper .w-md-editor-preview .wmde-markdown {
+  background-color: theme('colors.white') !important; 
+  color: theme('colors.black') !important;
+  font-size: 1.125rem !important; /* Slightly larger font for comfortable reading */
+  line-height: 1.75 !important; /* More generous line spacing */
+  caret-color: theme('colors.black') !important;
+}
+
+.zenEditorWrapper .wmde-markdown {
+  padding: 2rem !important; /* Consistent padding inside the markdown preview */
+  max-width: 100%; /* Ensure it doesn't overflow its container */
+}
+
+
+/* Ensure the MDEditor in Zen mode also has a white background if its internal styles fight back */
+.zenMDEditor.w-md-editor {
+  background-color: theme('colors.white') !important;
+}
+
+.zenMDEditor .w-md-editor-content {
+  background-color: theme('colors.white') !important;
+}
+
+.exitZenButton {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background-color: theme('colors.gray.800');
+  color: theme('colors.white');
+  border-radius: 9999px; /* pill shape */
+  padding: 0.75rem;
+  box-shadow: theme('boxShadow.lg');
+  z-index: 100; /* Above the editor content */
+  border: 2px solid theme('colors.white');
+  opacity: 0.7;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.exitZenButton:hover {
+  opacity: 1;
+}
+
+.zenPlaceholder {
+  color: theme('colors.gray.600') !important;
+  background-color: theme('colors.white') !important; 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.zenPlaceholder h1 {
+  color: theme('colors.black') !important;
+} 
