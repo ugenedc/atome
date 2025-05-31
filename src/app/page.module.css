@@ -112,14 +112,39 @@ html.dark .editorContainer .w-md-editor-text-pre > code {
   max-width: 100%; /* Ensure it doesn't overflow its container */
 }
 
-
 /* Ensure the MDEditor in Zen mode also has a white background if its internal styles fight back */
-.zenMDEditor.w-md-editor {
+.zenMDEditor.w-md-editor, .normalMDEditor.w-md-editor {
+  background-color: theme('colors.white') !important;
+  height: 100% !important; /* Ensure it takes full height of its container */
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.zenMDEditor .w-md-editor-content, .normalMDEditor .w-md-editor-content {
   background-color: theme('colors.white') !important;
 }
 
-.zenMDEditor .w-md-editor-content {
-  background-color: theme('colors.white') !important;
+/* Specific styles for normal mode editor if needed, otherwise general ones apply */
+.normalMDEditor .w-md-editor-toolbar {
+  /* Styles from .editorContainer .w-md-editor-toolbar will apply here */
+}
+
+html.dark .normalMDEditor .w-md-editor-toolbar {
+  /* Styles from html.dark .editorContainer .w-md-editor-toolbar will apply */
+}
+
+.normalMDEditor .w-md-editor-text-input,
+.normalMDEditor .w-md-editor-text-pre > code {
+  /* Styles from .editorContainer .w-md-editor-text-input will apply */
+   background-color: theme('colors.white') !important;
+   color: theme('colors.gray.900') !important; 
+}
+
+html.dark .normalMDEditor .w-md-editor-text-input,
+html.dark .normalMDEditor .w-md-editor-text-pre > code {
+  /* Styles from html.dark .editorContainer .w-md-editor-text-input will apply */
+  background-color: theme('colors.gray.900') !important;
+  color: theme('colors.gray.100') !important;
 }
 
 .exitZenButton {

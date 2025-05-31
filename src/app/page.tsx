@@ -7,6 +7,21 @@ import AuthForm from '@/components/AuthForm';
 import MDEditor from "@uiw/react-md-editor";
 import styles from './page.module.css';
 
+// Debounce function
+function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  const debounced = (...args: Parameters<F>) => {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    timeout = setTimeout(() => func(...args), waitFor);
+  };
+
+  return debounced as (...args: Parameters<F>) => void;
+}
+
 export default function Home() {
   const { session, loading: authLoading, initializeAuthListener, signOut, user } = useAuthStore();
   const {
@@ -32,6 +47,7 @@ export default function Home() {
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [editorContent, setEditorContent] = useState<string | undefined>('');
   const [isZenMode, setIsZenMode] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const toggleZenMode = useCallback(() => {
     setIsZenMode(prev => !prev);
@@ -66,14 +82,21 @@ export default function Home() {
 
   useEffect(() => {
     if (currentChapter) {
-      setEditorContent(currentChapter.content || '');
+      // Only update editorContent if it's different from what's already there
+      // or if the chapter itself changed. This prevents overwriting user's unsaved typing.
+      // A more robust check for chapter ID change would involve useRef for previous chapter ID.
+      if(editorContent !== currentChapter.content){
+         setEditorContent(currentChapter.content || '');
+      }
     } else {
-      setEditorContent(undefined);
+      setEditorContent(undefined); // Clear editor when no chapter is selected
     }
+    // Reset Zen mode if current chapter changes or becomes null
+    // and Zen mode is active, to avoid being stuck in Zen mode without an editor.
     if (isZenMode && !currentChapter) {
       setIsZenMode(false);
     }
-  }, [currentChapter, isZenMode]);
+  }, [currentChapter, isZenMode]); // editorContent is intentionally NOT in the dep array here to avoid loops with auto-save
 
   const handleCreateBook = async (e: FormEvent) => {
     e.preventDefault();
@@ -120,13 +143,21 @@ export default function Home() {
     return 'An unexpected error occurred.';
   };
 
-  const handleSaveContent = async () => {
-    if (currentChapter && editorContent !== undefined) {
-      if (editorContent !== currentChapter.content) {
-        await updateChapterContent(currentChapter.id, editorContent);
-      }
+  const handleSaveContent = useCallback(async (contentToSave: string) => {
+    if (currentChapter && contentToSave !== currentChapter.content) {
+      setIsSaving(true);
+      await updateChapterContent(currentChapter.id, contentToSave);
+      setIsSaving(false);
     }
-  };
+  }, [currentChapter, updateChapterContent]);
+  
+  const debouncedSave = useCallback(debounce(handleSaveContent, 1500), [handleSaveContent]);
+
+  useEffect(() => {
+    if (editorContent !== undefined && currentChapter && editorContent !== currentChapter.content) {
+      debouncedSave(editorContent);
+    }
+  }, [editorContent, currentChapter, debouncedSave]);
 
   if (authLoading) {
     return (
@@ -233,12 +264,13 @@ export default function Home() {
                     {currentBook && <p className="text-xs text-gray-500 dark:text-gray-400">Book: {currentBook.title}</p>}
                   </div>
                   <div className="flex items-center gap-2">
+                    {isSaving && <span className="text-xs text-gray-500 dark:text-gray-400">Saving...</span>}
                     <button
-                      onClick={handleSaveContent}
+                      onClick={() => editorContent !== undefined && handleSaveContent(editorContent)}
                       className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 dark:disabled:bg-gray-600"
-                      disabled={loadingChapters || editorContent === undefined || editorContent === currentChapter.content}
+                      disabled={loadingChapters || isSaving || editorContent === undefined || editorContent === currentChapter.content}
                     >
-                      {loadingChapters ? 'Saving...' : 'Save'}
+                      {isSaving ? 'Saving...' : (editorContent === currentChapter.content ? 'Saved' : 'Save Now')}
                     </button>
                     <button
                       onClick={toggleZenMode}
@@ -252,13 +284,13 @@ export default function Home() {
                   </div>
                 </div>
               )}
-              <div className={`${styles.editorContainer} flex-grow overflow-y-auto ${isZenMode ? styles.zenEditorWrapper : 'p-1 md:p-2 lg:p-4'}`} data-color-mode="light">
+              <div className={`${styles.editorContainer} flex-grow overflow-y-auto ${isZenMode ? styles.zenEditorWrapper : 'p-1 md:p-2 lg:p-4'}`}>
                 <MDEditor
                   value={editorContent}
                   onChange={setEditorContent}
                   height={isZenMode? undefined : "100%"}
                   preview="live"
-                  className={`h-full border-none shadow-none ${isZenMode ? styles.zenMDEditor : ''}`}
+                  className={`${isZenMode ? styles.zenMDEditor : styles.normalMDEditor}`}
                   hideToolbar={isZenMode}
                   textareaProps={{
                     placeholder: "Start writing your masterpiece..."
