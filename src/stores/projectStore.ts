@@ -33,6 +33,7 @@ interface ProjectState {
   loadingChapters: boolean;
   error: StoreError | string | null; // Allow string for simple messages too
   fetchBooks: (user: User) => Promise<void>;
+  fetchBookById: (bookId: string, user: User) => Promise<Book | null>;
   createBook: (title: string, user: User) => Promise<Book | null>;
   deleteBook: (bookId: string) => Promise<void>;
   setCurrentBook: (book: Book | null) => Promise<void>;
@@ -69,6 +70,49 @@ const useProjectStore = create<ProjectState>((set, get) => ({
       const error = e as StoreError;
       console.error('Error fetching books:', error);
       set({ error: error.message || 'Failed to fetch books', loadingBooks: false });
+    }
+  },
+
+  fetchBookById: async (bookId, user) => {
+    if (!user) {
+      set({ error: 'User not authenticated for fetchBookById' });
+      return null;
+    }
+    set({ loadingBooks: true, error: null });
+    try {
+      const { data, error } = await supabase
+        .from('books')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('id', bookId)
+        .single(); // We expect only one book or null
+
+      if (error && error.code !== 'PGRST116') { // PGRST116: Row toట్టుsingledisplayed
+        throw error;
+      }
+
+      if (data) {
+        // Add or update this book in the main books array if not already there or outdated
+        set(state => {
+          const bookExists = state.books.find(b => b.id === data.id);
+          let newBooksArray = state.books;
+          if (bookExists) {
+            newBooksArray = state.books.map(b => b.id === data.id ? data as Book : b);
+          } else {
+            newBooksArray = [...state.books, data as Book];
+          }
+          return { books: newBooksArray, loadingBooks: false };
+        });
+        return data as Book;
+      } else {
+        set({ error: `Book with ID ${bookId} not found.`, loadingBooks: false });
+        return null;
+      }
+    } catch (e: unknown) {
+      const error = e as StoreError;
+      console.error(`Error fetching book ${bookId}:`, error);
+      set({ error: error.message || `Failed to fetch book ${bookId}`, loadingBooks: false });
+      return null;
     }
   },
 
