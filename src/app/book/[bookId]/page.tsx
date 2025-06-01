@@ -22,6 +22,7 @@ function debounce<F extends (...args: Parameters<F>) => ReturnType<F>>(func: F, 
 }
 
 interface BookPageProps {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params: any; // Changed to any to workaround Next.js 15.3.3 type issue
 }
 
