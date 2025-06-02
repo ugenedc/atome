@@ -35,7 +35,7 @@ export default function CharacterProfilesSection() {
     setEditingProfile(null);
   };
 
-  const displayError = error ? (typeof error === 'string' ? error : (error as any)?.message || 'An unknown error occurred') : null;
+  const displayError = error ? (typeof error === 'string' ? error : error.message) : null;
 
   if (!currentBook) {
     return (

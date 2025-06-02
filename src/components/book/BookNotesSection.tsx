@@ -35,7 +35,7 @@ export default function BookNotesSection() {
     setEditingNote(null);
   };
 
-  const displayError = error ? (typeof error === 'string' ? error : (error as any)?.message || 'An unknown error occurred') : null;
+  const displayError = error ? (typeof error === 'string' ? error : error.message) : null;
 
   if (!currentBook) {
     return null; // Should be handled by parent, or a more descriptive placeholder if needed directly here
