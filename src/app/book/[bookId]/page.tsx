@@ -7,6 +7,10 @@ import MDEditor from "@uiw/react-md-editor";
 import styles from '../../page.module.css';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import CharacterProfilesSection from '@/components/book/CharacterProfilesSection';
+import BookNotesSection from '@/components/book/BookNotesSection';
+import ConfirmationModal from '@/components/common/ConfirmationModal';
+import { toast } from 'react-hot-toast';
 
 // Debounce function
 function debounce<F extends (...args: Parameters<F>) => ReturnType<F>>(func: F, waitFor: number) {
@@ -18,18 +22,18 @@ function debounce<F extends (...args: Parameters<F>) => ReturnType<F>>(func: F, 
     }
     timeout = setTimeout(() => func(...args), waitFor);
   };
-  return debounced as (...args: Parameters<F>) => void; // Return type is void as it's fire-and-forget
+  return debounced as (...args: Parameters<F>) => void;
 }
 
 interface BookPageProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  params: any; // Changed to any to workaround Next.js 15.3.3 type issue
+  params: any; 
 }
 
 export default function BookPage({ params }: BookPageProps) {
   const { session, loading: authLoading, user } = useAuthStore();
   const router = useRouter();
-  const bookId = params.bookId as string; // Extract and cast bookId
+  const bookId = params.bookId as string;
 
   const {
     chaptersByBookId,
@@ -51,33 +55,38 @@ export default function BookPage({ params }: BookPageProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingBook, setIsLoadingBook] = useState(true);
 
+  // State for delete confirmation modal
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'chapter' } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false); // For loading state on modal confirm button
+
   useEffect(() => {
-    if (user && bookId) {
-      setIsLoadingBook(true);
-      if (currentBook && currentBook.id === bookId) {
-        setIsLoadingBook(false);
-        if(!chaptersByBookId[bookId] || chaptersByBookId[bookId].length === 0){
-            setCurrentBook(currentBook); 
-        }
-        return;
-      }
-      const bookFromStore = useProjectStore.getState().books.find(b => b.id === bookId);
-      if (bookFromStore) {
-        setCurrentBook(bookFromStore).then(() => setIsLoadingBook(false));
-      } else {
-        fetchBookById(bookId, user).then(fetchedBook => {
-          if (fetchedBook) {
-            setCurrentBook(fetchedBook);
-          } else {
-            router.replace('/dashboard');
-          }
-          setIsLoadingBook(false);
-        });
-      }
-    } else if (!user && !authLoading) {
-        router.replace('/');
+    if (!user && !authLoading) {
+      router.replace('/');
+      return;
     }
-  }, [bookId, user, authLoading, fetchBookById, setCurrentBook, router, currentBook, chaptersByBookId]);
+
+    if (user && bookId) {
+      if (currentBook?.id !== bookId) {
+        setIsLoadingBook(true);
+        const bookFromStateBooks = useProjectStore.getState().books.find(b => b.id === bookId);
+        if (bookFromStateBooks) {
+          setCurrentBook(bookFromStateBooks)
+            .finally(() => setIsLoadingBook(false));
+        } else {
+          fetchBookById(bookId, user).then(fetchedBook => {
+            if (fetchedBook) {
+              setCurrentBook(fetchedBook);
+            } else {
+              router.replace('/dashboard');
+            }
+          }).finally(() => setIsLoadingBook(false));
+        }
+      } else {
+        if (isLoadingBook) setIsLoadingBook(false);
+      }
+    }
+  }, [bookId, user, authLoading, router, currentBook?.id, fetchBookById, setCurrentBook, isLoadingBook]);
 
   const toggleZenMode = useCallback(() => {
     setIsZenMode(prev => !prev);
@@ -119,13 +128,26 @@ export default function BookPage({ params }: BookPageProps) {
     }
   };
   
-  const handleDeleteChapter = async (chapterId: string) => {
-    if (confirm('Are you sure you want to delete this chapter?')) {
-      await deleteChapter(chapterId);
-      if (currentChapter?.id === chapterId) {
+  const handleDeleteChapter = async (chapterId: string, chapterTitle: string) => {
+    setItemToDelete({ id: chapterId, name: chapterTitle, type: 'chapter' });
+    setIsConfirmModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+
+    setIsDeleting(true);
+    if (itemToDelete.type === 'chapter') {
+      await deleteChapter(itemToDelete.id);
+      toast.success(`Chapter "${itemToDelete.name}" deleted.`);
+      if (currentChapter?.id === itemToDelete.id) {
         setCurrentChapter(null);
       }
     }
+    
+    setIsDeleting(false);
+    setIsConfirmModalOpen(false);
+    setItemToDelete(null);
   };
 
   const getErrorMessage = (error: unknown): string | null => {
@@ -165,17 +187,28 @@ export default function BookPage({ params }: BookPageProps) {
 
   if (authLoading || !session || isLoadingBook) { 
     return (
-      <div className="flex items-center justify-center h-screen">
-        <p>Loading book data...</p>
+      <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900">
+        <div className="text-center">
+          <svg className="animate-spin mx-auto h-12 w-12 text-blue-500 dark:text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p className="text-slate-700 dark:text-slate-300 text-lg">Loading book data...</p>
+        </div>
       </div>
     );
   }
 
   if (!currentBook) {
     return (
-        <div className="flex flex-col items-center justify-center h-screen">
-          <p className="text-xl mb-4">Book not found or you do not have access.</p>
-          <Link href="/dashboard" className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+        <div className="flex flex-col items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 p-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500 dark:text-red-400 mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8V4m0 16v-4" />
+          </svg>
+          <p className="text-xl text-slate-700 dark:text-slate-200 mb-4 font-semibold">Book Not Found</p>
+          <p className="text-slate-600 dark:text-slate-400 mb-8 text-center max-w-md">The book you are looking for does not exist or you may not have permission to access it.</p>
+          <Link href="/dashboard" className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-100 dark:focus:ring-offset-slate-900 focus:ring-blue-500 transition-colors">
             Return to Dashboard
           </Link>
         </div>
@@ -186,68 +219,124 @@ export default function BookPage({ params }: BookPageProps) {
   const displayError = getErrorMessage(projectError);
 
   return (
-    <main className={`${styles.mainLayout} ${isZenMode ? styles.zenModeActive : ''} flex flex-col h-screen bg-white dark:bg-gray-900`}>
+    <main className={`${styles.mainLayout} ${isZenMode ? styles.zenModeActive : ''} flex flex-col h-screen bg-slate-50 dark:bg-slate-900`}>
+      {/* No top-level app header on this page for focus */} 
       <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar: Chapters */} 
         {!isZenMode && (
-          <aside className="w-64 bg-gray-50 dark:bg-gray-800 p-4 overflow-y-auto space-y-4 border-r border-gray-200 dark:border-gray-700">
+          <aside className="w-72 bg-white dark:bg-slate-800 p-5 overflow-y-auto space-y-6 border-r border-slate-200 dark:border-slate-700 shadow-sm">
             <div>
-              <h3 className="text-lg font-semibold mb-3 text-gray-700 dark:text-gray-200">Chapters for: {currentBook.title}</h3>
-              <form onSubmit={handleCreateChapter} className="flex gap-2 mb-4">
+              <h3 className="text-xl font-semibold mb-1 text-slate-800 dark:text-slate-100 truncate" title={currentBook.title}>Chapters</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">For: <span className="font-medium">{currentBook.title}</span></p>
+              <form onSubmit={handleCreateChapter} className="flex flex-col gap-3 mb-6">
                 <input
                   type="text"
                   value={newChapterTitle}
                   onChange={(e) => setNewChapterTitle(e.target.value)}
-                  placeholder="New chapter title"
-                  className="flex-grow p-2 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="New chapter title..."
+                  className="flex-grow p-2.5 border border-slate-300 dark:border-slate-600 rounded-md text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   disabled={loadingChapters}
                 />
-                <button type="submit" className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm" disabled={loadingChapters || !newChapterTitle.trim()}>
-                  {loadingChapters ? '...' : 'Add'}
+                <button type="submit" 
+                  className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 focus:ring-blue-500 disabled:bg-slate-400 dark:disabled:bg-slate-500 transition-colors flex items-center justify-center space-x-2"
+                  disabled={loadingChapters || !newChapterTitle.trim()}
+                >
+                  {loadingChapters ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Adding...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      <span>Add Chapter</span>
+                    </>
+                  )}
                 </button>
               </form>
-              {loadingChapters && <p>Loading chapters...</p>}
-              {displayError && <p className="text-red-500 dark:text-red-400 text-xs">Error: {displayError}</p>}
-              <ul className="space-y-1">
-                {chaptersForCurrentBook.map((chapter) => (
-                  <li key={chapter.id} 
-                      onClick={() => setCurrentChapter(chapter)} 
-                      className={`p-2 rounded cursor-pointer text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 ${currentChapter?.id === chapter.id ? 'bg-blue-100 dark:bg-blue-700/30 font-semibold text-blue-600 dark:text-blue-300' : ''}`}>
-                     <div className="flex justify-between items-center">
-                        <span className="flex-grow">{chapter.title} (Order: {chapter.chapter_order})</span>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chapter.id);}} className="text-red-500 hover:text-red-700 text-xs p-1">✕</button>
-                      </div>
-                  </li>
-                ))}
-              </ul>
+              {loadingChapters && chaptersForCurrentBook.length === 0 && 
+                <div className="text-center py-4">
+                  <svg className="animate-spin mx-auto h-8 w-8 text-blue-500 dark:text-blue-400 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Loading chapters...</p>
+                </div>
+              }
+              {displayError && <p className="text-red-500 dark:text-red-400 text-xs bg-red-100 dark:bg-red-900/30 p-2 rounded-md">Error: {displayError}</p>}
+              {chaptersForCurrentBook.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {chaptersForCurrentBook.map((chapter) => (
+                    <li key={chapter.id} 
+                        onClick={() => setCurrentChapter(chapter)} 
+                        className={`group flex justify-between items-center p-2.5 rounded-md cursor-pointer transition-all duration-150 ease-in-out text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60 ${currentChapter?.id === chapter.id ? 'bg-blue-50 dark:bg-blue-600/20 font-semibold text-blue-600 dark:text-blue-300 ring-1 ring-blue-500 dark:ring-blue-500' : ''}`}>
+                      <span className="truncate pr-2 flex-1" title={chapter.title}>{chapter.title}</span>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDeleteChapter(chapter.id, chapter.title);}}
+                        className="text-slate-400 hover:text-red-600 dark:text-slate-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-full focus:outline-none focus:ring-1 focus:ring-red-500 transition-opacity duration-150"
+                        title="Delete chapter"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (!loadingChapters && !displayError && (
+                <div className="text-center py-12 px-6 border border-dashed border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-800/30">
+                    <svg className="mx-auto h-16 w-16 text-blue-500 dark:text-blue-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">No Chapters Yet</h3>
+                    <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Your story is waiting for its first chapter. Add one above to begin plotting your narrative!</p>
+                </div>
+              ))}
             </div>
           </aside>
         )}
 
-        <section className={`flex-1 flex flex-col overflow-hidden ${isZenMode ? 'p-0' : 'bg-white dark:bg-gray-900'} ${isZenMode ? styles.zenEditorSection : ''}`}>
+        {/* Main Writing Area */}
+        <section className={`flex-1 flex flex-col overflow-hidden ${isZenMode ? 'p-0' : 'bg-white dark:bg-slate-800/30'} ${isZenMode ? styles.zenEditorSection : ''}`}>
           {currentChapter ? (
             <div className="flex flex-col flex-grow h-full">
               {!isZenMode && (
-                <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 shadow-sm">
                   <div>
-                    <h1 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">{currentChapter.title}</h1>
-                    {currentBook && <p className="text-xs text-gray-500 dark:text-gray-400">Book: {currentBook.title}</p>}
+                    <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100 truncate" title={currentChapter.title}>{currentChapter.title}</h1>
+                    {currentBook && <p className="text-xs text-slate-500 dark:text-slate-400">Book: <span className="font-medium">{currentBook.title}</span></p>}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {isSaving && <span className="text-xs text-gray-500 dark:text-gray-400">Saving...</span>}
+                  <div className="flex items-center gap-3">
+                    {isSaving && <span className="text-xs text-slate-500 dark:text-slate-400 animate-pulse">Saving...</span>}
                     <button
                       onClick={() => editorContent !== undefined && handleSaveContent(editorContent)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 dark:disabled:bg-gray-600"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-slate-400 dark:disabled:bg-slate-500 transition-colors duration-150 flex items-center space-x-1.5"
                       disabled={loadingChapters || isSaving || editorContent === undefined || editorContent === currentChapter.content}
                     >
-                      {isSaving ? 'Saving...' : (editorContent === currentChapter.content ? 'Saved' : 'Save Now')}
+                      {isSaving ? (
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                        </svg>
+                      )}
+                      <span>{isSaving ? 'Saving...' : (editorContent === currentChapter.content ? 'Saved' : 'Save Now')}</span>
                     </button>
                     <button
                       onClick={toggleZenMode}
                       title="Toggle Zen Mode (Esc to exit)"
-                      className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 rounded-md"
+                      className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 rounded-md transition-colors duration-150"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm0 0l2.225-4.517M6.25 6.25l3.11-2.19L10.5 15M6.25 6.25L3.11 4.06M6.25 6.25l2.225 4.517M12 12m-1 1v6m0-6H9m3 0h3m-3 0V6m0 6v6m0-6H9m3 0h3m-3 0V6" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9M20.25 20.25h-4.5m4.5 0v-4.5m0-4.5L15 15" />
                       </svg>
                     </button>
                   </div>
@@ -274,32 +363,71 @@ export default function BookPage({ params }: BookPageProps) {
                     className={styles.exitZenButton}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                       <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM13.5 10.5h-6" />
+                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
                     </svg>
                  </button>
               )}
             </div>
           ) : currentBook ? (
-            <div className={`text-center mt-10 p-8 ${isZenMode ? styles.zenPlaceholder : 'text-gray-500 dark:text-gray-400'}`}>
-                <h1 className={`text-2xl font-bold mb-4 ${isZenMode ? 'text-gray-700' : 'text-gray-700 dark:text-gray-200'}`}>{currentBook.title}</h1>
-                <p>Select a chapter to start writing, or create a new one.</p>
+            <div className={`flex flex-col items-center justify-center text-center flex-grow p-8 ${isZenMode ? styles.zenPlaceholder : 'text-slate-600 dark:text-slate-400'} bg-white dark:bg-slate-800/30`}>
+                <svg className={`mx-auto h-20 w-20 mb-6 ${isZenMode ? 'text-slate-500' : 'text-slate-400 dark:text-slate-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                </svg>
+                <h1 className={`text-3xl font-semibold mb-3 ${isZenMode ? 'text-slate-800' : 'text-slate-800 dark:text-slate-100'}`}>{currentBook.title}</h1>
+                <p className={`text-lg ${isZenMode ? 'text-slate-600' : 'text-slate-500 dark:text-slate-400'}`}>Select a chapter to begin, or create a new one.</p>
             </div>
           ) : (
-            <div className={`text-center mt-10 p-8 ${isZenMode ? styles.zenPlaceholder : 'text-gray-500 dark:text-gray-400'}`}>
-                <h1 className={`text-2xl font-bold mb-4 ${isZenMode ? 'text-gray-700' : 'text-gray-700 dark:text-gray-200'}`}>Book not loaded</h1>
-                <p>Please select a book from the dashboard.</p>
+            <div className={`flex flex-col items-center justify-center text-center flex-grow p-8 ${isZenMode ? styles.zenPlaceholder : 'text-slate-600 dark:text-slate-400'} bg-white dark:bg-slate-800/30`}>
+                {/* This state should ideally not be reached if bookId is invalid / user unauth, as handled by earlier checks */}
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500 dark:text-red-400 mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                <h1 className={`text-2xl font-bold mb-4 ${isZenMode ? 'text-slate-700' : 'text-slate-700 dark:text-slate-200'}`}>Book Error</h1>
+                <p className={`${isZenMode ? 'text-slate-600' : 'text-slate-500 dark:text-slate-400'} mb-6`}>There was an issue loading the book. Please try again or return to dashboard.</p>
+                <Link href="/dashboard" className="px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-800 focus:ring-blue-500 transition-colors">
+                  Go to Dashboard
+                </Link>
             </div>
           )}
         </section>
 
+        {/* Right Sidebar for Profiles/Notes */} 
         {!isZenMode && (
-          <aside className="w-64 bg-gray-50 dark:bg-gray-800 p-4 overflow-y-auto border-l border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-200">Profiles & Notes</h2>
-            {currentBook && <p className="text-xs text-gray-500 dark:text-gray-400">For: {currentBook.title}</p>}
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Character profiles and notes will go here.</p>
+          <aside className="w-80 bg-white dark:bg-slate-800 p-5 overflow-y-auto border-l border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold mb-1 text-slate-800 dark:text-slate-100">Story Elements</h2>
+              {currentBook && <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">For: <span className="font-medium truncate">{currentBook.title}</span></p>}
+            </div>
+
+            {/* Character Profiles Section */}
+            <CharacterProfilesSection />
+
+            {/* Divider */}
+            <hr className="border-slate-200 dark:border-slate-700 my-6" />
+
+            {/* Book Notes Section */}
+            <BookNotesSection />
+            
           </aside>
         )}
       </div>
+
+      <ConfirmationModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={confirmDelete}
+        title={`Delete ${itemToDelete?.type || 'item'}`}
+        message={
+          <span>
+            Are you sure you want to delete <strong className="font-semibold text-slate-700 dark:text-slate-200">{itemToDelete?.name}</strong>? 
+            <br />
+            This action cannot be undone.
+          </span>
+        }
+        confirmButtonText={isDeleting ? 'Deleting...' : 'Delete'}
+        isLoading={isDeleting}
+        confirmButtonVariant="danger"
+      />
     </main>
   );
 } 
