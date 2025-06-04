@@ -54,6 +54,7 @@ export default function BookPage({ params }: BookPageProps) {
   const [isZenMode, setIsZenMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingBook, setIsLoadingBook] = useState(true);
+  const [loadedChapterId, setLoadedChapterId] = useState<string | null | undefined>(null);
 
   // State for delete confirmation modal
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -104,18 +105,21 @@ export default function BookPage({ params }: BookPageProps) {
     };
   }, [isZenMode, toggleZenMode]);
 
- useEffect(() => {
+  useEffect(() => {
     if (currentChapter) {
-      if (editorContent !== currentChapter.content) {
-         setEditorContent(currentChapter.content || '');
+      if (currentChapter.id !== loadedChapterId) {
+        setEditorContent(currentChapter.content || '');
+        setLoadedChapterId(currentChapter.id);
       }
     } else {
       setEditorContent(undefined);
+      setLoadedChapterId(null);
     }
+
     if (isZenMode && !currentChapter) {
       setIsZenMode(false);
     }
-  }, [currentChapter, editorContent, isZenMode]);
+  }, [currentChapter, isZenMode, loadedChapterId]);
 
   const handleCreateChapter = async (e: FormEvent) => {
     e.preventDefault();
