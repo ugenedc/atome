@@ -2,7 +2,7 @@
 
 import { useEffect, useState, FormEvent, useCallback, useMemo } from 'react';
 import useAuthStore from '@/stores/authStore';
-import useProjectStore from '@/stores/projectStore';
+import useProjectStore, { CharacterProfile, BookNote } from '@/stores/projectStore';
 import MDEditor from "@uiw/react-md-editor";
 import styles from '../../page.module.css';
 import { useRouter } from 'next/navigation';
@@ -11,6 +11,7 @@ import CharacterProfilesSection from '@/components/book/CharacterProfilesSection
 import BookNotesSection from '@/components/book/BookNotesSection';
 import ConfirmationModal from '@/components/common/ConfirmationModal';
 import { toast } from 'react-hot-toast';
+import { visit, SKIP } from 'unist-util-visit';
 
 // Debounce function
 function debounce<F extends (...args: Parameters<F>) => ReturnType<F>>(func: F, waitFor: number) {
@@ -23,6 +24,173 @@ function debounce<F extends (...args: Parameters<F>) => ReturnType<F>>(func: F, 
     timeout = setTimeout(() => func(...args), waitFor);
   };
   return debounced as (...args: Parameters<F>) => void;
+}
+
+// remark plugin to find and link mentions
+function createRemarkMentionPlugin(itemsToMention: Array<{ id: string; name: string; type: 'character' | 'note' }>) {
+  if (!itemsToMention || itemsToMention.length === 0) {
+    return () => (tree: any) => tree; // No-op plugin
+  }
+
+  // Sort by length descending to ensure longer names are matched first (e.g., "First Last" before "First")
+  const sortedItems = [...itemsToMention].sort((a, b) => b.name.length - a.name.length);
+
+  // This function is the remark "attacher"
+  return function remarkMentionsAttacher() {
+    // This function is the "transformer"
+    return function transformer(tree: any) {
+      visit(tree, 'text', (node, index, parent) => {
+        if (!parent || typeof node.value !== 'string' || !index === undefined) {
+          return;
+        }
+
+        const text = node.value;
+        const newChildren: any[] = [];
+        let lastIndex = 0;
+
+        // Iterate through the text to find all occurrences of the items
+        let currentSearchIndex = 0;
+        while (currentSearchIndex < text.length) {
+          let foundItem = null;
+          let matchStartIndex = -1;
+          let matchLength = 0;
+
+          // Check for each sorted item at the current position
+          for (const item of sortedItems) {
+            if (text.substring(currentSearchIndex).startsWith(item.name)) {
+              // Preliminary match found, now check word boundaries
+              const charBeforeIndex = currentSearchIndex -1;
+              const charAfterIndex = currentSearchIndex + item.name.length;
+
+              const isStartBoundary = 
+                currentSearchIndex === 0 || 
+                !/\\w/.test(text[charBeforeIndex]);
+              
+              const isEndBoundary = 
+                charAfterIndex === text.length || 
+                !/\\w/.test(text[charAfterIndex]);
+
+              if (isStartBoundary && isEndBoundary) {
+                foundItem = item;
+                matchStartIndex = currentSearchIndex;
+                matchLength = item.name.length;
+                break; // Found the longest, boundary-respecting match
+              }
+            }
+          }
+
+          if (foundItem && matchStartIndex !== -1) {
+            // Add text before the match
+            if (matchStartIndex > lastIndex) {
+              newChildren.push({ type: 'text', value: text.slice(lastIndex, matchStartIndex) });
+            }
+            // Add the mention as a link
+            newChildren.push({
+              type: 'link',
+              url: `mention://${foundItem.type}/${foundItem.id}`,
+              children: [{ type: 'text', value: foundItem.name }],
+              data: { mention: true, itemType: foundItem.type, itemId: foundItem.id, itemName: foundItem.name },
+              title: `View ${foundItem.type}: ${foundItem.name}`
+            });
+            lastIndex = matchStartIndex + matchLength;
+            currentSearchIndex = lastIndex;
+          } else {
+            // No match at currentSearchIndex, advance currentSearchIndex by 1
+            // and ensure the loop progresses. Add the character at currentSearchIndex to newChildren if no previous text node is pending.
+            // This part of the logic ensures that text not part of any mention is preserved.
+            // It's simpler to find the *next* match or the end of the string.
+            
+            let nextAdvance = text.length; // Default to end of string
+            if (newChildren.length > 0 && newChildren[newChildren.length-1].type === 'text') {
+                 // If last added was text, append to it
+                newChildren[newChildren.length-1].value += text[currentSearchIndex];
+            } else {
+                 newChildren.push({ type: 'text', value: text[currentSearchIndex]});
+            }
+            currentSearchIndex++;
+            lastIndex = currentSearchIndex; // Or handle accumulation differently
+          }
+        }
+        
+        // After loop, if there's remaining text from lastIndex
+        // The logic above for non-matches should handle this by incrementing char by char.
+        // Let's refine the non-match part:
+        // The loop should find the *next* segment of text that is either a mention or non-mention text.
+
+        // --- Revision of the loop logic for clarity and correctness ---
+        const revisedNewChildren: any[] = [];
+        let currentTextIndex = 0;
+        while(currentTextIndex < text.length) {
+            let bestMatch = null; // { item: MentionItem, startIndex: number, length: number }
+
+            for(const item of sortedItems) {
+                const KMP_FAIL = -1; // Knuth-Morris-Pratt failure value
+                let kmp_i = 0, kmp_j = 0;
+                const textSegment = text.substring(currentTextIndex);
+                
+                // Simple indexOf for now, KMP is overkill here.
+                const itemIndexInSegment = textSegment.indexOf(item.name);
+
+                if (itemIndexInSegment === 0) { // Match must start at currentTextIndex
+                    const startIndex = currentTextIndex;
+                    const endIndex = startIndex + item.name.length;
+
+                    const charBefore = startIndex > 0 ? text[startIndex - 1] : ' ';
+                    const charAfter = endIndex < text.length ? text[endIndex] : ' ';
+                    
+                    const startOk = !/\\w/.test(charBefore) || !/\\w/.test(item.name[0]);
+                    const endOk = !/\\w/.test(charAfter) || !/\\w/.test(item.name[item.name.length -1]);
+
+                    if(startOk && endOk) {
+                        bestMatch = { item, startIndex, length: item.name.length};
+                        break; // Since sortedItems is by length, this is the best match starting at currentTextIndex
+                    }
+                }
+            }
+
+            if (bestMatch) {
+                // Add text before this match, if any (should be empty if matches are contiguous)
+                // This part needs to be handled by how currentTextIndex advances
+                
+                revisedNewChildren.push({
+                    type: 'link',
+                    url: `mention://${bestMatch.item.type}/${bestMatch.item.id}`,
+                    children: [{ type: 'text', value: bestMatch.item.name }],
+                    data: { mention: true, itemType: bestMatch.item.type, itemId: bestMatch.item.id, itemName: bestMatch.item.name },
+                    title: `View ${bestMatch.item.type}: ${bestMatch.item.name}`
+                });
+                currentTextIndex += bestMatch.length;
+            } else {
+                // No match starting at currentTextIndex. Add this character as plain text.
+                // And find the start of the next segment of plain text.
+                let nextPotentialMatchStart = text.length;
+                for(const item of sortedItems) {
+                    const R_KMP_FAIL = -1;
+                    let R_kmp_i = currentTextIndex + 1, R_kmp_j = 0;
+                    const nextOcc = text.indexOf(item.name, currentTextIndex + 1);
+                    if (nextOcc !== -1 && nextOcc < nextPotentialMatchStart) {
+                        nextPotentialMatchStart = nextOcc;
+                    }
+                }
+                
+                const plainTextSegment = text.substring(currentTextIndex, nextPotentialMatchStart);
+                if (plainTextSegment) {
+                   revisedNewChildren.push({ type: 'text', value: plainTextSegment });
+                }
+                currentTextIndex = nextPotentialMatchStart;
+            }
+        }
+
+
+        if (revisedNewChildren.length > 0 && (revisedNewChildren.length !== 1 || revisedNewChildren[0].type !== 'text' || revisedNewChildren[0].value !== text)) {
+            if (parent && typeof index === 'number') {
+                 parent.children.splice(index, 1, ...revisedNewChildren);
+                 return [SKIP, index + revisedNewChildren.length];
+            }
+        }
+      });
+    };
+  };
 }
 
 interface BookPageProps {
@@ -47,6 +215,8 @@ export default function BookPage({ params }: BookPageProps) {
     updateChapterContent,
     deleteChapter,
     setCurrentChapter,
+    characterProfilesByBookId,
+    bookNotesByBookId,
   } = useProjectStore();
 
   const [newChapterTitle, setNewChapterTitle] = useState('');
@@ -188,6 +358,44 @@ export default function BookPage({ params }: BookPageProps) {
       router.replace('/');
     }
   }, [session, authLoading, router]);
+
+  // ---- MENTION LOGIC ----
+  const mentionableItems = useMemo(() => {
+    const items: Array<{ id: string; name: string; type: 'character' | 'note' }> = [];
+    if (currentBook) {
+      const profiles = characterProfilesByBookId[currentBook.id] || [];
+      profiles.forEach(p => {
+        if (p.name && p.name.trim() !== '') { // Ensure name is not empty
+          items.push({ id: p.id, name: p.name, type: 'character' });
+        }
+      });
+      const notes = bookNotesByBookId[currentBook.id] || [];
+      notes.forEach(n => {
+        if (n.title && n.title.trim() !== '') { // Ensure title is not empty
+         items.push({ id: n.id, name: n.title, type: 'note' });
+        }
+      });
+    }
+    return items.sort((a, b) => b.name.length - a.name.length); // Important: match longer names first
+  }, [characterProfilesByBookId, bookNotesByBookId, currentBook]);
+
+  const handleMentionClick = useCallback((type: string, id: string, name: string) => {
+    toast.success(`Clicked mention: ${name} (${type} ID: ${id})`);
+    // Here you would typically open a drawer or modal with the item's details
+    // For example:
+    // if (type === 'character') {
+    //   const profile = characterProfilesByBookId[currentBook!.id]?.find(p => p.id === id);
+    //   // openCharacterDrawer(profile);
+    // } else if (type === 'note') {
+    //   const note = bookNotesByBookId[currentBook!.id]?.find(n => n.id === id);
+    //   // openNoteDrawer(note);
+    // }
+  }, []);
+
+  const remarkPlugins = useMemo(() => {
+    return [createRemarkMentionPlugin(mentionableItems)];
+  }, [mentionableItems]);
+  // ---- END MENTION LOGIC ----
 
   if (authLoading || !session || isLoadingBook) { 
     return (
@@ -357,7 +565,28 @@ export default function BookPage({ params }: BookPageProps) {
                   textareaProps={{
                     placeholder: "Start writing your masterpiece..."
                   }}
-                  visibleDragbar={!isZenMode} 
+                  visibleDragbar={!isZenMode}
+                  previewOptions={{
+                    remarkPlugins: remarkPlugins,
+                    components: {
+                      a: ({ node, ...props }) => {
+                        if (props.href?.startsWith('mention://') && node?.data) {
+                          const { itemType, itemId, itemName } = node.data as { itemType: string; itemId: string; itemName: string };
+                          return (
+                            <span
+                              style={{ color: 'cornflowerblue', cursor: 'pointer', textDecoration: 'underline' }}
+                              onClick={() => handleMentionClick(itemType, itemId, itemName)}
+                              title={props.title || `View ${itemName}`}
+                            >
+                              {props.children}
+                            </span>
+                          );
+                        }
+                        // eslint-disable-next-line jsx-a11y/anchor-has-content
+                        return <a {...props} />; // Default link rendering
+                      },
+                    },
+                  }}
                 />
               </div>
               {isZenMode && (
